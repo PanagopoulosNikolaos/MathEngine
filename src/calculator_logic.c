@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <ctype.h>
+#include <stdbool.h>
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -22,6 +23,70 @@ int get_precedence(char op);
 void apply_operator(Calculator* calc, char op);
 double factorial(double n);
 int is_right_associative(char op);
+
+typedef enum {
+    TOKEN_NONE,
+    TOKEN_NUMBER,
+    TOKEN_OPERATOR,
+    TOKEN_LPAREN,
+    TOKEN_RPAREN,
+    TOKEN_FUNCTION,
+    TOKEN_CONSTANT
+} TokenType;
+
+static int needs_implicit_multiplication(TokenType prev, TokenType current) {
+    if (prev == TOKEN_NONE) {
+        return 0;
+    }
+
+    int prev_is_value = (prev == TOKEN_NUMBER || prev == TOKEN_RPAREN || prev == TOKEN_CONSTANT);
+    int current_is_value = (current == TOKEN_LPAREN || current == TOKEN_NUMBER || current == TOKEN_CONSTANT || current == TOKEN_FUNCTION);
+
+    return prev_is_value && current_is_value;
+}
+
+static int process_operator_token(Calculator* calc, char op) {
+    while (calc->operators.top != -1) {
+        char top_op = os_peek(&calc->operators);
+        int top_prec = get_precedence(top_op);
+        int curr_prec = get_precedence(op);
+
+        if (top_prec > curr_prec || (top_prec == curr_prec && !is_right_associative(op))) {
+            apply_operator(calc, os_pop(&calc->operators));
+            if (calc->error != ERROR_NONE) {
+                return 0;
+            }
+        } else {
+            break;
+        }
+    }
+
+    if (!os_push(&calc->operators, op)) {
+        calc->error = ERROR_STACK_OVERFLOW;
+        return 0;
+    }
+
+    return 1;
+}
+
+static int insert_implicit_multiplication(Calculator* calc, TokenType* prev_token, TokenType current_token) {
+    if (needs_implicit_multiplication(*prev_token, current_token)) {
+        if (!process_operator_token(calc, '*')) {
+            return 0;
+        }
+        *prev_token = TOKEN_OPERATOR;
+    }
+    return 1;
+}
+
+static void format_result(char* buffer, size_t size, double value) {
+    double abs_val = fabs(value);
+    if (abs_val != 0.0 && (abs_val >= 1e10 || abs_val < 1e-6)) {
+        snprintf(buffer, size, "%.10e", value);
+    } else {
+        snprintf(buffer, size, "%.10g", value);
+    }
+}
 
 Calculator* calculator_new(void) {
     Calculator* calc = (Calculator*)malloc(sizeof(Calculator));
@@ -69,11 +134,26 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
     calc->operators.total_pushed = 0;
     calc->error = ERROR_NONE;
 
+    TokenType prev_token = TOKEN_NONE;
     const char* p = expression;
 
     while (*p) {
-        if (isspace((unsigned char)*p)) { p++; continue; }
+        if (isspace((unsigned char)*p)) {
+            p++;
+            continue;
+        }
+
         if (isdigit((unsigned char)*p) || *p == '.') {
+            if (*p == '.' && prev_token == TOKEN_NUMBER) {
+                calc->error = ERROR_SYNTAX;
+                snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
+                return;
+            }
+
+            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_NUMBER)) {
+                break;
+            }
+
             char* end;
             double num = strtod(p, &end);
             if (end == p) {
@@ -86,65 +166,75 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
                 break;
             }
             p = end;
+            prev_token = TOKEN_NUMBER;
             continue;
         } else if (*p == 'p') {
+            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_CONSTANT)) {
+                break;
+            }
             if (!ns_push(&calc->numbers, M_PI)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
+            prev_token = TOKEN_CONSTANT;
         } else if (*p == 'e') {
+            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_CONSTANT)) {
+                break;
+            }
             if (!ns_push(&calc->numbers, M_E)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
+            prev_token = TOKEN_CONSTANT;
         } else if (*p == '(') {
+            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_LPAREN)) {
+                break;
+            }
             if (!os_push(&calc->operators, *p)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
+            prev_token = TOKEN_LPAREN;
         } else if (*p == ')') {
             while (calc->operators.top != -1 && os_peek(&calc->operators) != '(') {
                 apply_operator(calc, os_pop(&calc->operators));
-                if (calc->error != ERROR_NONE) break;
+                if (calc->error != ERROR_NONE) {
+                    break;
+                }
             }
-            if (calc->error != ERROR_NONE) break;
+            if (calc->error != ERROR_NONE) {
+                break;
+            }
 
             if (calc->operators.top != -1) {
-                os_pop(&calc->operators); // Pop '('
+                os_pop(&calc->operators);
             } else {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Mismatched parentheses");
                 return;
             }
+            prev_token = TOKEN_RPAREN;
         } else if (isalpha((unsigned char)*p)) {
+            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_FUNCTION)) {
+                break;
+            }
             char func[MAX_FUNCTION_NAME_LENGTH];
             int i = 0;
             while (isalpha((unsigned char)*p) && i < MAX_FUNCTION_NAME_LENGTH - 1) {
                 func[i++] = *p++;
             }
             func[i] = '\0';
-            if (!os_push(&calc->operators, func[0])) { // Simple mapping NOT recommended to be changed later on
+            if (!os_push(&calc->operators, func[0])) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
-            p--; // Decrement to handle the next character correctly
-        } else { // Operator
-            while (calc->operators.top != -1) {
-                char top_op = os_peek(&calc->operators);
-                int top_prec = get_precedence(top_op);
-                int curr_prec = get_precedence(*p);
-                if (top_prec > curr_prec || (top_prec == curr_prec && !is_right_associative(*p))) {
-                    apply_operator(calc, os_pop(&calc->operators));
-                    if (calc->error != ERROR_NONE) break;
-                } else {
-                    break;
-                }
-            }
-            if (calc->error != ERROR_NONE) break;
-            if (!os_push(&calc->operators, *p)) {
-                calc->error = ERROR_STACK_OVERFLOW;
+            p--;
+            prev_token = TOKEN_FUNCTION;
+        } else {
+            if (!process_operator_token(calc, *p)) {
                 break;
             }
+            prev_token = TOKEN_OPERATOR;
         }
         p++;
     }
@@ -165,7 +255,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
         } else if (calc->error == ERROR_STACK_OVERFLOW) {
             snprintf(calc->buffer, sizeof(calc->buffer), "Error: Operator stack overflow");
         } else if (calc->error == ERROR_SYNTAX) {
-             snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Mismatched parentheses");
+            snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Mismatched parentheses");
         }
         return;
     }
@@ -173,7 +263,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
     if (calc->numbers.top == 0) {
         double val = ns_pop(&calc->numbers);
         if (isnan(val)) {
-             if (calc->error == ERROR_MATH_DIV_ZERO) {
+            if (calc->error == ERROR_MATH_DIV_ZERO) {
                 snprintf(calc->buffer, sizeof(calc->buffer), "Math Error: Division by zero");
             } else {
                 snprintf(calc->buffer, sizeof(calc->buffer), "Math Error: Domain error (e.g., sqrt(-1))");
@@ -181,7 +271,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
         } else if (!isfinite(val)) {
             snprintf(calc->buffer, sizeof(calc->buffer), "Error: Overflow");
         } else {
-            snprintf(calc->buffer, sizeof(calc->buffer), "%.10g", val);
+            format_result(calc->buffer, sizeof(calc->buffer), val);
         }
     } else if (calc->error == ERROR_NONE) {
         snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");

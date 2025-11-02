@@ -1,4 +1,5 @@
 #include <gtk/gtk.h> // 
+#include <glib.h>
 #include <string.h>
 #include <stdlib.h>
 #include "calculator_logic.h"
@@ -143,10 +144,26 @@ static void on_window_destroy(GtkWidget *widget, gpointer data) {
 }
 
 static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data) {
-    CalculatorApp *app = (CalculatorApp *)malloc(sizeof(CalculatorApp));
+    CalculatorApp *app = (CalculatorApp *)calloc(1, sizeof(CalculatorApp));
+    if (!app) {
+        g_warning("Failed to allocate CalculatorApp");
+        return;
+    }
+
     app->calc = calculator_new();
+    if (!app->calc) {
+        g_warning("Failed to allocate Calculator");
+        free(app);
+        return;
+    }
 
     app->window = gtk_application_window_new(app_gtk);
+    if (!app->window) {
+        g_warning("Failed to create application window");
+        calculator_free(app->calc);
+        free(app);
+        return;
+    }
     gtk_window_set_title(GTK_WINDOW(app->window), "Google Calculator");
     gtk_window_set_default_size(GTK_WINDOW(app->window), 400, 550);
     gtk_window_set_resizable(GTK_WINDOW(app->window), TRUE);
@@ -169,6 +186,8 @@ static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data
     
     gtk_box_append(GTK_BOX(vbox), app->entry);
     gtk_widget_set_vexpand(app->entry, FALSE);
+
+    update_display(app);
 
     /* Grid of buttons */
     app->grid = gtk_grid_new();
