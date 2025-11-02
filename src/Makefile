@@ -7,7 +7,9 @@ SOURCES = calculator.c calculator_logic.c
 OBJECTS = $(SOURCES:.c=.o)
 
 TEST_TARGET = test_calculator
-TEST_SOURCES = test_calculator.c calculator_logic.c
+TEST_SOURCES = test_calculator.c calculator_logic.c /usr/local/include/unity/unity.c
+TEST_CFLAGS = -I/usr/local/include -DUNITY_INCLUDE_DOUBLE
+TEST_LDFLAGS = -lm
 
 all: $(TARGET)
 
@@ -15,7 +17,7 @@ $(TARGET): $(OBJECTS)
 	$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 $(TEST_TARGET): $(TEST_SOURCES)
-	$(CC) $(TEST_SOURCES) -o $(TEST_TARGET) -lm
+	$(CC) $(TEST_SOURCES) $(TEST_CFLAGS) -o $(TEST_TARGET) $(TEST_LDFLAGS)
 
 
 %.o: %.c

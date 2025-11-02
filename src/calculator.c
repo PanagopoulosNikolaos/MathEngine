@@ -76,7 +76,7 @@ static const FunctionMapping func_mappings[] = {
 // Binary search function for efficient lookup of function mappings
 static char lookup_function_mapping(const char *label) {
     int left = 0;
-    int right = sizeof(func_mappings) / sizeof(func_mappings[0]) - 1;  // Exclude the NULL terminator
+    int right = (sizeof(func_mappings) / sizeof(func_mappings[0])) - 2;  // Exclude the NULL terminator
     
     while (left <= right) {
         int mid = left + (right - left) / 2;
@@ -125,8 +125,10 @@ static void on_clear_pressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
 static void on_backspace_pressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
     GtkEntryBuffer *buffer = gtk_entry_get_buffer(GTK_ENTRY(((CalculatorApp *)data)->entry));
     guint length = gtk_entry_buffer_get_length(buffer);
-    if (length > 0) {
+    if (length > 1) {
         gtk_entry_buffer_delete_text(buffer, length - 1, 1);
+    } else if (length == 1) {
+        gtk_entry_buffer_set_text(buffer, "0", -1);
     }
 }
 
@@ -371,11 +373,15 @@ static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data
 
     GtkCssProvider *css_provider = gtk_css_provider_new();
     gtk_css_provider_load_from_string(css_provider, css_str);
+    gtk_style_context_add_provider_for_display(
+        gdk_display_get_default(),
+        GTK_STYLE_PROVIDER(css_provider),
+        GTK_STYLE_PROVIDER_PRIORITY_APPLICATION
+    );
+    g_object_unref(css_provider);
 
     gtk_widget_add_css_class(app->grid, "grid");
     gtk_widget_add_css_class(app->entry, "display");
-    
-    g_object_unref(css_provider);
 
     gtk_window_present(GTK_WINDOW(app->window));
 }

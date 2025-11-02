@@ -15,13 +15,13 @@
 
 // Function prototypes for stack operations
 int ns_push(NumberStack* s, double item);
-double ns_pop(NumberStack* s);
+double ns_pop(NumberStack* s, Calculator* calc);
 int os_push(OperatorStack* s, char item);
 char os_pop(OperatorStack* s);
 char os_peek(OperatorStack* s);
 int get_precedence(char op);
 void apply_operator(Calculator* calc, char op);
-double factorial(double n);
+double factorial(double n, Calculator* calc);
 int is_right_associative(char op);
 
 typedef enum {
@@ -143,24 +143,34 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
             continue;
         }
 
-        if (isdigit((unsigned char)*p) || *p == '.') {
-            if (*p == '.' && prev_token == TOKEN_NUMBER) {
+        if (isdigit((unsigned char)*p) || *p == '.' || ((*p == '+' || *p == '-') && (prev_token == TOKEN_NONE || prev_token == TOKEN_OPERATOR || prev_token == TOKEN_LPAREN || prev_token == TOKEN_FUNCTION) && (isdigit((unsigned char)*(p + 1)) || *(p + 1) == '.'))) {
+            // Disallow a fractional token starting with '.' immediately after a value (e.g., "2.3.4")
+            if (*p == '.' && (prev_token == TOKEN_NUMBER || prev_token == TOKEN_RPAREN || prev_token == TOKEN_CONSTANT)) {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
                 return;
             }
-
             if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_NUMBER)) {
                 break;
             }
 
+            const char* start = p;
+
+            // Parse number with optional leading sign using strtod
             char* end;
-            double num = strtod(p, &end);
-            if (end == p) {
+            double num = strtod(start, &end);
+            if (end == start) {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
                 return;
             }
+            // If a '.' immediately follows a completed number (e.g., "2.3.4" or "2..3"), it's invalid
+            if (*end == '.') {
+                calc->error = ERROR_SYNTAX;
+                snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
+                return;
+            }
+
             if (!ns_push(&calc->numbers, num)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
@@ -261,7 +271,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
     }
 
     if (calc->numbers.top == 0) {
-        double val = ns_pop(&calc->numbers);
+        double val = ns_pop(&calc->numbers, calc);
         if (isnan(val)) {
             if (calc->error == ERROR_MATH_DIV_ZERO) {
                 snprintf(calc->buffer, sizeof(calc->buffer), "Math Error: Division by zero");
@@ -287,11 +297,14 @@ int ns_push(NumberStack* s, double item) {
     return 0;
 }
 
-double ns_pop(NumberStack* s) {
+double ns_pop(NumberStack* s, Calculator* calc) {
     if (s->top > -1) {
         return s->items[s->top--];
     }
-    return 0.0; // Should handle error
+    if (calc) {
+        calc->error = ERROR_SYNTAX;
+    }
+    return 0.0;
 }
 
 int os_push(OperatorStack* s, char item) {
@@ -339,11 +352,11 @@ void apply_operator(Calculator* calc, char op) {
     AngleMode angle_mode = calc->angle_mode;
 
     switch (op) {
-        case '+': b = ns_pop(numbers); a = ns_pop(numbers); ns_push(numbers, a + b); break;
-        case '-': b = ns_pop(numbers); a = ns_pop(numbers); ns_push(numbers, a - b); break;
-        case '*': b = ns_pop(numbers); a = ns_pop(numbers); ns_push(numbers, a * b); break;
+        case '+': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a + b); break;
+        case '-': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a - b); break;
+        case '*': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a * b); break;
         case '/': 
-            b = ns_pop(numbers); a = ns_pop(numbers); 
+            b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); 
             if (b == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
                 ns_push(numbers, NAN);
@@ -352,7 +365,7 @@ void apply_operator(Calculator* calc, char op) {
             }
             break;
         case '%': 
-            b = ns_pop(numbers); a = ns_pop(numbers); 
+            b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); 
             if (b == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
                 ns_push(numbers, NAN);
@@ -361,18 +374,71 @@ void apply_operator(Calculator* calc, char op) {
                 ns_push(numbers, fmod(a, b));
             }
             break;
-        case '^': b = ns_pop(numbers); a = ns_pop(numbers); ns_push(numbers, pow(a, b)); break;
+        case '^': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, pow(a, b)); break;
 
-        case 's': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? sin(a * M_PI / 180.0) : sin(a)); break;
-        case 'c': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? cos(a * M_PI / 180.0) : cos(a)); break;
-        case 't': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? tan(a * M_PI / 180.0) : tan(a)); break;
+        case 's': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? sin(a * M_PI / 180.0) : sin(a)); 
+            break;
+        case 'c': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? cos(a * M_PI / 180.0) : cos(a)); 
+            break;
+        case 't': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? tan(a * M_PI / 180.0) : tan(a)); 
+            break;
 
-        case 'S': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? asin(a) * 180.0 / M_PI : asin(a)); break;
-        case 'C': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? acos(a) * 180.0 / M_PI : acos(a)); break;
-        case 'T': a = ns_pop(numbers); ns_push(numbers, angle_mode == DEG ? atan(a) * 180.0 / M_PI : atan(a)); break;
+        case 'S': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? asin(a) * 180.0 / M_PI : asin(a)); 
+            break;
+        case 'C': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? acos(a) * 180.0 / M_PI : acos(a)); 
+            break;
+        case 'T': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, angle_mode == DEG ? atan(a) * 180.0 / M_PI : atan(a)); 
+            break;
 
         case 'l': 
-            a = ns_pop(numbers); 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
             if (a <= 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
                 ns_push(numbers, NAN);
@@ -381,7 +447,12 @@ void apply_operator(Calculator* calc, char op) {
             }
             break;
         case 'L': 
-            a = ns_pop(numbers); 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
             if (a <= 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
                 ns_push(numbers, NAN);
@@ -390,7 +461,12 @@ void apply_operator(Calculator* calc, char op) {
             }
             break;
         case 'q': 
-            a = ns_pop(numbers); 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
             if (a < 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
                 ns_push(numbers, NAN);
@@ -399,10 +475,31 @@ void apply_operator(Calculator* calc, char op) {
                 ns_push(numbers, sqrt(a));
             }
             break;
-        case '!': a = ns_pop(numbers); ns_push(numbers, factorial(a)); break;
-        case 'E': a = ns_pop(numbers); ns_push(numbers, exp(a)); break;
+        case '!': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, factorial(a, calc)); 
+            break;
+        case 'E': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, exp(a)); 
+            break;
         case 'R': 
-            a = ns_pop(numbers); 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
             if (a == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
                 ns_push(numbers, NAN);
@@ -410,19 +507,33 @@ void apply_operator(Calculator* calc, char op) {
                 ns_push(numbers, 1.0 / a);
             }
             break;
-        case 'N': a = ns_pop(numbers); ns_push(numbers, -a); break;
+        case 'N': 
+            if (numbers->top < 0) {
+                calc->error = ERROR_SYNTAX;
+                ns_push(numbers, NAN);
+                return;
+            }
+            a = ns_pop(numbers, calc); 
+            ns_push(numbers, -a); 
+            break;
         default: break;
     }
 }
 
-double factorial(double n) {
-    if (n < 0 || floor(n) != n) return NAN; // Only defined for non-negative integers
+double factorial(double n, Calculator* calc) {
+    if (n < 0 || floor(n) != n) {
+        calc->error = ERROR_MATH_DOMAIN;
+        return NAN;
+    }
     if (n == 0) return 1;
     double result = 1;
     int ni = (int)n;
     for (int i = 1; i <= ni; i++) {
         result *= i;
-        if (!isfinite(result)) return NAN;
+        if (!isfinite(result)) {
+            calc->error = ERROR_MATH_DOMAIN;
+            return NAN;
+        }
     }
     return result;
 }
