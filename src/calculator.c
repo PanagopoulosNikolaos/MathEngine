@@ -14,9 +14,11 @@ typedef struct {
 /* Forward declarations */
 static void on_button_pressed(GtkWidget *widget, gpointer data);
 static void on_equals_pressed(GtkWidget *widget, gpointer data);
+static void on_entry_activate(GtkEntry *entry, gpointer data);
 static void on_clear_pressed(GtkWidget *widget, gpointer data);
 static void on_backspace_pressed(GtkWidget *widget, gpointer data);
 static void update_display(CalculatorApp *app);
+static void evaluate_expression(CalculatorApp *app);
 
 static void update_display(CalculatorApp *app) {
     const char *display_text = calculator_get_display(app->calc);
@@ -109,11 +111,18 @@ static void on_button_pressed(GtkWidget *widget, gpointer data) {
     }
 }
 
-static void on_equals_pressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
-    CalculatorApp *app = (CalculatorApp *)data;
+static void evaluate_expression(CalculatorApp *app) {
     const char *expression = gtk_entry_buffer_get_text(gtk_entry_get_buffer(GTK_ENTRY(app->entry)));
     calculator_evaluate(app->calc, expression);
     update_display(app);
+}
+
+static void on_entry_activate(GtkEntry *entry G_GNUC_UNUSED, gpointer data) {
+    evaluate_expression((CalculatorApp *)data);
+}
+
+static void on_equals_pressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
+    evaluate_expression((CalculatorApp *)data);
 }
 
 static void on_clear_pressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
@@ -184,12 +193,15 @@ static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data
     gtk_widget_set_valign(app->entry, GTK_ALIGN_CENTER);
     gtk_widget_add_css_class(app->entry, "display");
     gtk_entry_set_alignment(GTK_ENTRY(app->entry), 1.0);
-    gtk_editable_set_editable(GTK_EDITABLE(app->entry), FALSE);
+    gtk_editable_set_editable(GTK_EDITABLE(app->entry), TRUE);
+    gtk_widget_set_can_focus(app->entry, TRUE);
+    g_signal_connect(app->entry, "activate", G_CALLBACK(on_entry_activate), app);
     
     gtk_box_append(GTK_BOX(vbox), app->entry);
     gtk_widget_set_vexpand(app->entry, FALSE);
 
     update_display(app);
+    gtk_widget_grab_focus(app->entry);
 
     /* Grid of buttons */
     app->grid = gtk_grid_new();
@@ -312,9 +324,9 @@ static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data
         "  font-family: 'DejaVu Sans Mono', monospace; "
         "  font-weight: bold; "
         "  padding: 20px; "
-        "  background-color: #f8f9fa; "
+        "  background-color: #fef9e7; "
         "  border-radius: 8px; "
-        "  color: #333333; "
+        "  color: #2c2412; "
         "  font-size: 24px;"
         "} "
         "button { "
@@ -327,48 +339,48 @@ static void create_calculator_window(GtkApplication *app_gtk, gpointer user_data
         "  min-height: 40px; "
         "} "
         "button.btn-digit { "
-        "  background-color: #ffffff; "
-        "  color: #333333; "
-        "  border: 1px solid #dadce0; "
+        "  background-color: #FFF59D; "
+        "  color: #2c2412; "
+        "  border: 1px solid #d4a017; "
         "} "
         "button.btn-digit:hover { "
-        "  background-color: #f8f9fa; "
+        "  background-color: #FFE082; "
         "} "
         "button.btn-digit:active { "
-        "  background-color: #e8eaed; "
+        "  background-color: #FFD54F; "
         "} "
         "button.btn-operator { "
-        "  background-color: #4285f4; "
-        "  color: white; "
-        "  border: none; "
+        "  background-color: #FFC107; "
+        "  color: #1f1502; "
+        "  border: 1px solid #b28704; "
         "} "
         "button.btn-operator:hover { "
-        "  background-color: #3367d6; "
+        "  background-color: #FFB300; "
         "} "
         "button.btn-operator:active { "
-        "  background-color: #2551b8; "
+        "  background-color: #FFA000; "
         "} "
         "button.btn-function { "
-        "  background-color: #f8f9fa; "
-        "  color: #3c4043; "
-        "  border: 1px solid #dadce0; "
+        "  background-color: #FFECB3; "
+        "  color: #2c2412; "
+        "  border: 1px solid #d4a017; "
         "} "
         "button.btn-function:hover { "
-        "  background-color: #f1f3f4; "
+        "  background-color: #FFE082; "
         "} "
         "button.btn-function:active { "
-        "  background-color: #e8eaed; "
+        "  background-color: #FFD54F; "
         "} "
         "button.btn-equals { "
-        "  background-color: #34a853; "
-        "  color: white; "
-        "  border: none; "
+        "  background-color: #FFB300; "
+        "  color: #1f1502; "
+        "  border: 1px solid #b28704; "
         "} "
         "button.btn-equals:hover { "
-        "  background-color: #2d8e47; "
+        "  background-color: #FFA000; "
         "} "
         "button.btn-equals:active { "
-        "  background-color: #1f6b3e; "
+        "  background-color: #FF8F00; "
         "} ";
 
     GtkCssProvider *css_provider = gtk_css_provider_new();
