@@ -1,0 +1,81 @@
+# Ignore common C/C++ build artifacts and binaries
+
+# Object files and precompiled headers
+*.o
+*.obj
+*.lo
+*.la
+*.slo
+*.gch
+*.pch
+
+# Static and shared libraries
+*.a
+*.lib
+*.so
+*.dylib
+*.dll
+
+# Executables and general compiled output
+a.out
+*.out
+*.elf
+*.exe
+
+# Debugging and crash files
+core
+*.stackdump
+*.dSYM/
+
+# Common build directories (anywhere in tree)
+build/
+bin/
+out/
+dist/
+Debug/
+Release/
+cmake-build-*/
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+
+# Qt / qmake
+*.moc
+moc_*
+
+
+# Data files
+*.csv
+*.dat
+*.data
+*.db
+*.sqlite
+*.sqlite3
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+*.rar
+*.7z
+
+# Large binary data files
+*.bin
+*.dump
+
+# Project-specific files
+improvements.md
+.env
+
+# VS Code
+.vscode/
+
+# Ignore all files in src/ except source files and documentation
+src/*
+!src/*.c
+!src/*.h
+!src/*.md
+!src/Makefile
