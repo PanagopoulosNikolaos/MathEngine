@@ -2,6 +2,10 @@
 
 A scientific calculator implemented in C with GTK4 GUI. Originally intended as a clone of Google's calculator but evolved into a more comprehensive scientific calculator application.
 
+## User Interface
+
+![Calculator Screenshot](images/image.png)
+
 ## Features
 
 - **Scientific Functions**:
@@ -66,11 +70,20 @@ make test
 
 ## Project Structure
 
-- `calculator.c` - Main GUI application and event handlers
-- `calculator_logic.c` - Core calculator computation logic
-- `calculator_logic.h` - Calculator logic header and data structures
-- `Makefile` - Build configuration with GTK4 and math library support
-- `test_calculator.c` - Unit tests for calculator logic
+```
+MathEngine/
+├── LICENSE
+├── README.md
+├── images/
+│   └── image.png                 - Screenshot of the calculator GUI
+├── src/
+│   ├── calculator/
+│   ├── calculator.c              - Main GUI application and event handlers
+│   ├── calculator_logic.c        - Core calculator computation logic
+│   ├── calculator_logic.h        - Calculator logic header and data structures
+│   ├── Makefile                  - Build configuration with GTK4 and math library support
+│   └── test_calculator.c         - Unit tests for calculator logic
+```
 
 ## Usage
 
