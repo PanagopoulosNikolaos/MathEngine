@@ -1,4 +1,8 @@
-# Scientific Calculator in C
+# MathEngine
+
+<p align="center">
+  <img src="images/mathengine_banner.png" alt="MathEngine Banner" width="100%">
+</p>
 
 A scientific calculator implemented in C with GTK4 GUI. Originally intended as a clone of Google's calculator but evolved into a more comprehensive scientific calculator application.
 
@@ -31,15 +35,32 @@ A scientific calculator implemented in C with GTK4 GUI. Originally intended as a
   - Large monospace display for clear number visibility
   - Support for both keyboard input and button clicks
 
-## Build Requirements
+## Build Requirements & Installation
 
-- GTK 4.0 or later
-- GLib 2.0
-- Cairo graphics library
-- Pango text rendering
-- Graphene geometry library
-- GCC compiler
-- Math library (libm)
+To build and run MathEngine, you need standard compilation tools and the GTK4 development libraries.
+
+### Debian / Ubuntu
+Install the required packages using `apt`:
+```bash
+sudo apt update
+sudo apt install -y libgtk-4-dev build-essential pkg-config
+```
+
+### Arch Linux
+Install the required packages using `pacman`:
+```bash
+sudo pacman -Syu gtk4 base-devel pkgconf
+```
+
+### Unity Test Framework (Required for Tests)
+To compile and run the unit tests, the Unity C test framework must be installed. The project's build system expects it in `/usr/local/include/unity/`.
+
+```bash
+git clone https://github.com/ThrowTheSwitch/Unity.git
+sudo mkdir -p /usr/local/include/unity
+sudo cp Unity/src/unity.c Unity/src/unity.h Unity/src/unity_internals.h /usr/local/include/unity/
+rm -rf Unity
+```
 
 ## Building
 
