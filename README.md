@@ -12,7 +12,11 @@ A scientific calculator implemented in C with GTK4 GUI. Originally intended as a
 [![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 ## User Interface
 
-![Calculator Screenshot](images/app_ui.png)
+<p align="center">
+  <img src="images/app_ui.png" height="300" width=250 alt="MathEngine Banner">
+  <img src="images/compact_1_ui.png" height="300" alt="Compact UI 1">
+  <img src="images/compact_2_ui.png" height="300" alt="Compact UI 2">
+</p>
 
 ## Features
 

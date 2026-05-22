@@ -1,5 +1,5 @@
 CC = gcc
-CFLAGS = $(shell pkg-config --cflags gtk4) -Wall -Wextra -O2
+CFLAGS = $(shell pkg-config --cflags gtk4) -Wall -Wextra -Wpedantic -O2
 LDFLAGS = $(shell pkg-config --libs gtk4) -lm
 
 TARGET = calculator
@@ -18,7 +18,6 @@ $(TARGET): $(OBJECTS)
 
 $(TEST_TARGET): $(TEST_SOURCES)
 	$(CC) $(TEST_SOURCES) $(TEST_CFLAGS) -o $(TEST_TARGET) $(TEST_LDFLAGS)
-
 
 %.o: %.c
 	$(CC) $(CFLAGS) -c $< -o $@

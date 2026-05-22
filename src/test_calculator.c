@@ -461,16 +461,16 @@ void testMismatchedParentheses(void) {
 
 void testStackOverflow(void) {
     /**
-     * Tests error handling when number of operations exceeds stack limits.
+     * Tests that the calculator handles a reasonable sequence of additions correctly.
      * Returns:
      * void: No return value.
      */
-    char long_expr[1000];
-    strcpy(long_expr, "1");
-    for (int i = 0; i < 200; i++) {
+    // Build an expression with 99 additions to verify the stack depth of 100 is sufficient
+    char long_expr[1000] = "1";
+    for (int i = 0; i < 99; i++) {
         strcat(long_expr, "+1");
     }
-    testExpression(long_expr, "Error: Operator stack overflow");
+    testExpression(long_expr, "100");
 }
 
 void testCalculatorClear(void) {

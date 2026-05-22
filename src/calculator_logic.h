@@ -38,7 +38,6 @@ typedef struct {
 typedef struct {
     char items[MAX_STACK_SIZE];
     int top;
-    int total_pushed;
 } OperatorStack;
 /**
  * Represents a stack of operator characters.

@@ -24,6 +24,81 @@ void applyOperator(Calculator* calc, char op);
 double factorial(double n, Calculator* calc);
 int isRightAssociative(char op);
 
+typedef struct {
+    const char *name;
+    char mapped_char;
+} FunctionNameMapping;
+
+static const FunctionNameMapping function_name_map[] = {
+    {"sin", 's'},
+    {"cos", 'c'},
+    {"tan", 't'},
+    {"sqrt", 'q'},
+    {"ln", 'l'},
+    {"log", 'L'},
+    {"exp", 'E'},
+    {NULL, '\0'}
+};
+
+static int isFunctionCode(char c) {
+    /**
+     * Checks if a single character is a recognized internal function operator code.
+     * Args:
+     * c (char): The character to check.
+     * Returns:
+     * int: Non-zero if the character is a valid function code.
+     */
+    switch (c) {
+        case 's': case 'c': case 't': case 'S': case 'C': case 'T':
+        case 'l': case 'L': case 'q': case '!': case 'E': case 'R': case 'N':
+            return 1;
+        default:
+            return 0;
+    }
+}
+
+static const char* recognized_function_names[] = {
+    "sin", "cos", "tan", "sqrt", "ln", "log", "exp", NULL
+};
+
+static int isValidFunctionName(const char *name) {
+    /**
+     * Checks if a string is a recognized multi-character function name or single-char code.
+     * Args:
+     * name (const char*): The function name string.
+     * Returns:
+     * int: Non-zero if recognized, zero otherwise.
+     */
+    if (name[0] != '\0' && name[1] == '\0') {
+        return isFunctionCode(name[0]);
+    }
+    for (int i = 0; recognized_function_names[i] != NULL; i++) {
+        if (strcmp(name, recognized_function_names[i]) == 0) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+static char lookupFunctionName(const char *name) {
+    /**
+     * Maps a function name or single-char code to its internal operator character.
+     * Args:
+     * name (const char*): The function name or single-char code.
+     * Returns:
+     * char: The internal operator character, or '\0' if not found.
+     */
+    if (name[0] != '\0' && name[1] == '\0') {
+        return name[0];
+    }
+    for (int i = 0; function_name_map[i].name != NULL; i++) {
+        if (strcmp(name, function_name_map[i].name) == 0) {
+            return function_name_map[i].mapped_char;
+        }
+    }
+    return '\0';
+}
+
 typedef enum {
     TOKEN_NONE,
     TOKEN_NUMBER,
@@ -135,7 +210,6 @@ Calculator* calculatorNew(void) {
         calc->error = ERROR_NONE;
         calc->numbers.top = -1;
         calc->operators.top = -1;
-        calc->operators.total_pushed = 0;
     }
     return calc;
 }
@@ -213,7 +287,6 @@ void calculatorEvaluate(Calculator* calc, const char* expression) {
      */
     calc->numbers.top = -1;
     calc->operators.top = -1;
-    calc->operators.total_pushed = 0;
     calc->error = ERROR_NONE;
 
     TokenType prev_token = TOKEN_NONE;
@@ -316,7 +389,16 @@ void calculatorEvaluate(Calculator* calc, const char* expression) {
                 func[i++] = *p++;
             }
             func[i] = '\0';
-            if (!osPush(&calc->operators, func[0])) {
+            if (!isValidFunctionName(func)) {
+                calc->error = ERROR_SYNTAX;
+                snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Unknown function '%s'", func);
+                return;
+            }
+            char mapped_op = lookupFunctionName(func);
+            if (mapped_op == '\0') {
+                mapped_op = func[0];
+            }
+            if (!osPush(&calc->operators, mapped_op)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
@@ -416,11 +498,7 @@ int osPush(OperatorStack* s, char item) {
     if (s->top >= MAX_STACK_SIZE - 1) {
         return 0;
     }
-    if (s->total_pushed >= MAX_STACK_SIZE) {
-        return 0;
-    }
     s->items[++s->top] = item;
-    s->total_pushed++;
     return 1;
 }
 
@@ -658,7 +736,10 @@ void applyOperator(Calculator* calc, char op) {
             a = nsPop(numbers, calc); 
             nsPush(numbers, -a); 
             break;
-        default: break;
+        default: 
+            calc->error = ERROR_SYNTAX;
+            snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Unknown operator");
+            break;
     }
 }
 
