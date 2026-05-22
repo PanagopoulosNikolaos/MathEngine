@@ -79,4 +79,3 @@ src/*
 !src/*.h
 !src/*.md
 !src/Makefile
-images/mathengine_banner.png

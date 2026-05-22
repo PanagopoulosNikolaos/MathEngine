@@ -1,14 +1,18 @@
 # MathEngine
 
 <p align="center">
-  <img src="images/mathengine_banner.png" alt="MathEngine Banner" width="100%">
+  <img src="images/mathengine_banner.png" height="400" alt="MathEngine Banner" width="100%">
 </p>
 
 A scientific calculator implemented in C with GTK4 GUI. Originally intended as a clone of Google's calculator but evolved into a more comprehensive scientific calculator application.
 
+[![Language](https://img.shields.io/badge/Language-C-blue?style=flat-square)](https://en.cppreference.com/w/c)
+[![UI](https://img.shields.io/badge/UI-GTK4-orange?style=flat-square)](https://www.gtk.org/)
+[![Testing](https://img.shields.io/badge/Testing-Unity-005F87?style=flat-square)](http://www.throwtheswitch.org/unity)
+[![License](https://img.shields.io/badge/License-MIT-yellow?style=flat-square)](LICENSE)
 ## User Interface
 
-![Calculator Screenshot](images/image.png)
+![Calculator Screenshot](images/app_ui.png)
 
 ## Features
 

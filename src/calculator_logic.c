@@ -13,16 +13,16 @@
 #define M_E 2.71828182845904523536
 #endif
 
-// Function prototypes for stack operations
-int ns_push(NumberStack* s, double item);
-double ns_pop(NumberStack* s, Calculator* calc);
-int os_push(OperatorStack* s, char item);
-char os_pop(OperatorStack* s);
-char os_peek(OperatorStack* s);
-int get_precedence(char op);
-void apply_operator(Calculator* calc, char op);
+// Prototypes for stack operations
+int nsPush(NumberStack* s, double item);
+double nsPop(NumberStack* s, Calculator* calc);
+int osPush(OperatorStack* s, char item);
+char osPop(OperatorStack* s);
+char osPeek(OperatorStack* s);
+int getPrecedence(char op);
+void applyOperator(Calculator* calc, char op);
 double factorial(double n, Calculator* calc);
-int is_right_associative(char op);
+int isRightAssociative(char op);
 
 typedef enum {
     TOKEN_NONE,
@@ -34,7 +34,15 @@ typedef enum {
     TOKEN_CONSTANT
 } TokenType;
 
-static int needs_implicit_multiplication(TokenType prev, TokenType current) {
+static int needsImplicitMultiplication(TokenType prev, TokenType current) {
+    /**
+     * Determines whether implicit multiplication should be inserted between two token types.
+     * Args:
+     * prev (TokenType): The previous token type.
+     * current (TokenType): The current token type.
+     * Returns:
+     * int: Non-zero if implicit multiplication is needed, zero otherwise.
+     */
     if (prev == TOKEN_NONE) {
         return 0;
     }
@@ -45,14 +53,22 @@ static int needs_implicit_multiplication(TokenType prev, TokenType current) {
     return prev_is_value && current_is_value;
 }
 
-static int process_operator_token(Calculator* calc, char op) {
+static int processOperatorToken(Calculator* calc, char op) {
+    /**
+     * Processes an operator token by applying higher or equal precedence operators from the stack.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * op (char): The operator character to process.
+     * Returns:
+     * int: Non-zero if successfully processed, zero otherwise.
+     */
     while (calc->operators.top != -1) {
-        char top_op = os_peek(&calc->operators);
-        int top_prec = get_precedence(top_op);
-        int curr_prec = get_precedence(op);
+        char top_op = osPeek(&calc->operators);
+        int top_prec = getPrecedence(top_op);
+        int curr_prec = getPrecedence(op);
 
-        if (top_prec > curr_prec || (top_prec == curr_prec && !is_right_associative(op))) {
-            apply_operator(calc, os_pop(&calc->operators));
+        if (top_prec > curr_prec || (top_prec == curr_prec && !isRightAssociative(op))) {
+            applyOperator(calc, osPop(&calc->operators));
             if (calc->error != ERROR_NONE) {
                 return 0;
             }
@@ -61,7 +77,7 @@ static int process_operator_token(Calculator* calc, char op) {
         }
     }
 
-    if (!os_push(&calc->operators, op)) {
+    if (!osPush(&calc->operators, op)) {
         calc->error = ERROR_STACK_OVERFLOW;
         return 0;
     }
@@ -69,9 +85,18 @@ static int process_operator_token(Calculator* calc, char op) {
     return 1;
 }
 
-static int insert_implicit_multiplication(Calculator* calc, TokenType* prev_token, TokenType current_token) {
-    if (needs_implicit_multiplication(*prev_token, current_token)) {
-        if (!process_operator_token(calc, '*')) {
+static int insertImplicitMultiplication(Calculator* calc, TokenType* prev_token, TokenType current_token) {
+    /**
+     * Inserts an implicit multiplication operator if required by the token sequence.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * prev_token (TokenType*): A pointer to the previous token type, which may be updated.
+     * current_token (TokenType): The current token type.
+     * Returns:
+     * int: Non-zero if successfully inserted or not needed, zero on error.
+     */
+    if (needsImplicitMultiplication(*prev_token, current_token)) {
+        if (!processOperatorToken(calc, '*')) {
             return 0;
         }
         *prev_token = TOKEN_OPERATOR;
@@ -79,7 +104,16 @@ static int insert_implicit_multiplication(Calculator* calc, TokenType* prev_toke
     return 1;
 }
 
-static void format_result(char* buffer, size_t size, double value) {
+static void formatResult(char* buffer, size_t size, double value) {
+    /**
+     * Formats a double value into a string representation in the display buffer.
+     * Args:
+     * buffer (char*): The target string buffer.
+     * size (size_t): The maximum size of the buffer.
+     * value (double): The numeric value to format.
+     * Returns:
+     * void: No return value.
+     */
     double abs_val = fabs(value);
     if (abs_val != 0.0 && (abs_val >= 1e10 || abs_val < 1e-6)) {
         snprintf(buffer, size, "%.10e", value);
@@ -88,7 +122,12 @@ static void format_result(char* buffer, size_t size, double value) {
     }
 }
 
-Calculator* calculator_new(void) {
+Calculator* calculatorNew(void) {
+    /**
+     * Creates and initializes a new Calculator instance.
+     * Returns:
+     * Calculator*: A pointer to the newly allocated Calculator structure.
+     */
     Calculator* calc = (Calculator*)malloc(sizeof(Calculator));
     if (calc) {
         strcpy(calc->buffer, "0");
@@ -101,18 +140,39 @@ Calculator* calculator_new(void) {
     return calc;
 }
 
-void calculator_free(Calculator* calc) {
+void calculatorFree(Calculator* calc) {
+    /**
+     * Frees the memory allocated for a Calculator instance.
+     * Args:
+     * calc (Calculator*): The calculator context pointer to free.
+     * Returns:
+     * void: No return value.
+     */
     if (calc) {
         free(calc);
     }
 }
 
-void calculator_clear(Calculator* calc) {
+void calculatorClear(Calculator* calc) {
+    /**
+     * Resets the display buffer and error state of the calculator.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * Returns:
+     * void: No return value.
+     */
     strcpy(calc->buffer, "0");
     calc->error = ERROR_NONE;
 }
 
-void calculator_toggle_angle_mode(Calculator* calc) {
+void calculatorToggleAngleMode(Calculator* calc) {
+    /**
+     * Toggles the calculator angle mode between degrees and radians.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * Returns:
+     * void: No return value.
+     */
     if (calc->angle_mode == DEG) {
         calc->angle_mode = RAD;
     } else {
@@ -120,15 +180,37 @@ void calculator_toggle_angle_mode(Calculator* calc) {
     }
 }
 
-AngleMode calculator_get_angle_mode(const Calculator* calc) {
+AngleMode calculatorGetAngleMode(const Calculator* calc) {
+    /**
+     * Retrieves the current angle mode of the calculator.
+     * Args:
+     * calc (const Calculator*): The calculator context pointer.
+     * Returns:
+     * AngleMode: The current angle mode (DEG or RAD).
+     */
     return calc ? calc->angle_mode : DEG;
 }
 
-const char* calculator_get_display(const Calculator* calc) {
+const char* calculatorGetDisplay(const Calculator* calc) {
+    /**
+     * Retrieves the current string representation of the calculator display.
+     * Args:
+     * calc (const Calculator*): The calculator context pointer.
+     * Returns:
+     * const char*: The display string buffer.
+     */
     return calc->buffer;
 }
 
-void calculator_evaluate(Calculator* calc, const char* expression) {
+void calculatorEvaluate(Calculator* calc, const char* expression) {
+    /**
+     * Evaluates a mathematical expression and updates the calculator display with the result.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * expression (const char*): The string expression to evaluate.
+     * Returns:
+     * void: No return value.
+     */
     calc->numbers.top = -1;
     calc->operators.top = -1;
     calc->operators.total_pushed = 0;
@@ -144,19 +226,19 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
         }
 
         if (isdigit((unsigned char)*p) || *p == '.' || ((*p == '+' || *p == '-') && (prev_token == TOKEN_NONE || prev_token == TOKEN_OPERATOR || prev_token == TOKEN_LPAREN || prev_token == TOKEN_FUNCTION) && (isdigit((unsigned char)*(p + 1)) || *(p + 1) == '.'))) {
-            // Disallow a fractional token starting with '.' immediately after a value (e.g., "2.3.4")
+            // Rejects consecutive decimal points or decimal point immediately following a value to avoid syntax ambiguity.
             if (*p == '.' && (prev_token == TOKEN_NUMBER || prev_token == TOKEN_RPAREN || prev_token == TOKEN_CONSTANT)) {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
                 return;
             }
-            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_NUMBER)) {
+            if (!insertImplicitMultiplication(calc, &prev_token, TOKEN_NUMBER)) {
                 break;
             }
 
             const char* start = p;
 
-            // Parse number with optional leading sign using strtod
+            // Attempts to parse a double precision number with an optional leading sign.
             char* end;
             double num = strtod(start, &end);
             if (end == start) {
@@ -164,14 +246,14 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
                 return;
             }
-            // If a '.' immediately follows a completed number (e.g., "2.3.4" or "2..3"), it's invalid
+            // Checks if the token immediately following a parsed number is a decimal point to reject invalid floating point formats.
             if (*end == '.') {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
                 return;
             }
 
-            if (!ns_push(&calc->numbers, num)) {
+            if (!nsPush(&calc->numbers, num)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
@@ -179,35 +261,35 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
             prev_token = TOKEN_NUMBER;
             continue;
         } else if (*p == 'p') {
-            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_CONSTANT)) {
+            if (!insertImplicitMultiplication(calc, &prev_token, TOKEN_CONSTANT)) {
                 break;
             }
-            if (!ns_push(&calc->numbers, M_PI)) {
+            if (!nsPush(&calc->numbers, M_PI)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
             prev_token = TOKEN_CONSTANT;
         } else if (*p == 'e') {
-            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_CONSTANT)) {
+            if (!insertImplicitMultiplication(calc, &prev_token, TOKEN_CONSTANT)) {
                 break;
             }
-            if (!ns_push(&calc->numbers, M_E)) {
+            if (!nsPush(&calc->numbers, M_E)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
             prev_token = TOKEN_CONSTANT;
         } else if (*p == '(') {
-            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_LPAREN)) {
+            if (!insertImplicitMultiplication(calc, &prev_token, TOKEN_LPAREN)) {
                 break;
             }
-            if (!os_push(&calc->operators, *p)) {
+            if (!osPush(&calc->operators, *p)) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
             prev_token = TOKEN_LPAREN;
         } else if (*p == ')') {
-            while (calc->operators.top != -1 && os_peek(&calc->operators) != '(') {
-                apply_operator(calc, os_pop(&calc->operators));
+            while (calc->operators.top != -1 && osPeek(&calc->operators) != '(') {
+                applyOperator(calc, osPop(&calc->operators));
                 if (calc->error != ERROR_NONE) {
                     break;
                 }
@@ -217,7 +299,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
             }
 
             if (calc->operators.top != -1) {
-                os_pop(&calc->operators);
+                osPop(&calc->operators);
             } else {
                 calc->error = ERROR_SYNTAX;
                 snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Mismatched parentheses");
@@ -225,7 +307,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
             }
             prev_token = TOKEN_RPAREN;
         } else if (isalpha((unsigned char)*p)) {
-            if (!insert_implicit_multiplication(calc, &prev_token, TOKEN_FUNCTION)) {
+            if (!insertImplicitMultiplication(calc, &prev_token, TOKEN_FUNCTION)) {
                 break;
             }
             char func[MAX_FUNCTION_NAME_LENGTH];
@@ -234,14 +316,14 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
                 func[i++] = *p++;
             }
             func[i] = '\0';
-            if (!os_push(&calc->operators, func[0])) {
+            if (!osPush(&calc->operators, func[0])) {
                 calc->error = ERROR_STACK_OVERFLOW;
                 break;
             }
             p--;
             prev_token = TOKEN_FUNCTION;
         } else {
-            if (!process_operator_token(calc, *p)) {
+            if (!processOperatorToken(calc, *p)) {
                 break;
             }
             prev_token = TOKEN_OPERATOR;
@@ -250,11 +332,11 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
     }
 
     while (calc->operators.top != -1 && calc->error == ERROR_NONE) {
-        if (os_peek(&calc->operators) == '(') {
+        if (osPeek(&calc->operators) == '(') {
             calc->error = ERROR_SYNTAX;
             break;
         }
-        apply_operator(calc, os_pop(&calc->operators));
+        applyOperator(calc, osPop(&calc->operators));
     }
 
     if (calc->error != ERROR_NONE) {
@@ -271,7 +353,7 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
     }
 
     if (calc->numbers.top == 0) {
-        double val = ns_pop(&calc->numbers, calc);
+        double val = nsPop(&calc->numbers, calc);
         if (isnan(val)) {
             if (calc->error == ERROR_MATH_DIV_ZERO) {
                 snprintf(calc->buffer, sizeof(calc->buffer), "Math Error: Division by zero");
@@ -281,15 +363,22 @@ void calculator_evaluate(Calculator* calc, const char* expression) {
         } else if (!isfinite(val)) {
             snprintf(calc->buffer, sizeof(calc->buffer), "Error: Overflow");
         } else {
-            format_result(calc->buffer, sizeof(calc->buffer), val);
+            formatResult(calc->buffer, sizeof(calc->buffer), val);
         }
     } else if (calc->error == ERROR_NONE) {
         snprintf(calc->buffer, sizeof(calc->buffer), "Syntax Error: Invalid expression");
     }
 }
 
-// Stack implementations
-int ns_push(NumberStack* s, double item) {
+int nsPush(NumberStack* s, double item) {
+    /**
+     * Pushes a double value onto the number stack.
+     * Args:
+     * s (NumberStack*): The target number stack.
+     * item (double): The value to push.
+     * Returns:
+     * int: Non-zero if successful, zero if the stack is full.
+     */
     if (s->top < MAX_STACK_SIZE - 1) {
         s->items[++s->top] = item;
         return 1;
@@ -297,7 +386,15 @@ int ns_push(NumberStack* s, double item) {
     return 0;
 }
 
-double ns_pop(NumberStack* s, Calculator* calc) {
+double nsPop(NumberStack* s, Calculator* calc) {
+    /**
+     * Pops a double value from the number stack.
+     * Args:
+     * s (NumberStack*): The target number stack.
+     * calc (Calculator*): The calculator context pointer used to set error state.
+     * Returns:
+     * double: The popped value, or 0.0 if the stack is empty.
+     */
     if (s->top > -1) {
         return s->items[s->top--];
     }
@@ -307,7 +404,15 @@ double ns_pop(NumberStack* s, Calculator* calc) {
     return 0.0;
 }
 
-int os_push(OperatorStack* s, char item) {
+int osPush(OperatorStack* s, char item) {
+    /**
+     * Pushes an operator character onto the operator stack.
+     * Args:
+     * s (OperatorStack*): The target operator stack.
+     * item (char): The operator character to push.
+     * Returns:
+     * int: Non-zero if successful, zero if stack is full.
+     */
     if (s->top >= MAX_STACK_SIZE - 1) {
         return 0;
     }
@@ -319,208 +424,253 @@ int os_push(OperatorStack* s, char item) {
     return 1;
 }
 
-char os_pop(OperatorStack* s) {
+char osPop(OperatorStack* s) {
+    /**
+     * Pops an operator character from the operator stack.
+     * Args:
+     * s (OperatorStack*): The target operator stack.
+     * Returns:
+     * char: The popped operator character, or null character if empty.
+     */
     if (s->top > -1) {
         return s->items[s->top--];
     }
-    return '\0'; // Should handle error
+    return '\0';
 }
 
-char os_peek(OperatorStack* s) {
+char osPeek(OperatorStack* s) {
+    /**
+     * Peeks at the top operator character without removing it.
+     * Args:
+     * s (OperatorStack*): The target operator stack.
+     * Returns:
+     * char: The top operator character, or null character if empty.
+     */
     if (s->top > -1) {
         return s->items[s->top];
     }
-    return '\0'; // Should handle error
+    return '\0';
 }
 
-int get_precedence(char op) {
+int getPrecedence(char op) {
+    /**
+     * Returns the precedence level of a given operator.
+     * Args:
+     * op (char): The operator character.
+     * Returns:
+     * int: The precedence level (higher is greater precedence).
+     */
     switch (op) {
         case '+': case '-': return 1;
         case '*': case '/': case '%': return 2;
-        case '^': return 3; // exponent should be right-associative
+        case '^': return 3;
         case 's': case 'c': case 't': case 'l': case 'L': case 'q': case '!': case 'S': case 'C': case 'T': case 'E': case 'R': case 'N': return 4;
         default: return 0;
     }
 }
-int is_right_associative(char op) {
+
+int isRightAssociative(char op) {
+    /**
+     * Determines if a given operator is right-associative.
+     * Args:
+     * op (char): The operator character.
+     * Returns:
+     * int: Non-zero if right-associative, zero otherwise.
+     */
     return op == '^';
 }
 
-void apply_operator(Calculator* calc, char op) {
+void applyOperator(Calculator* calc, char op) {
+    /**
+     * Applies the given operator to the top values on the number stack.
+     * Args:
+     * calc (Calculator*): The calculator context pointer.
+     * op (char): The operator character to apply.
+     * Returns:
+     * void: No return value.
+     */
     double a, b;
     NumberStack* numbers = &calc->numbers;
     AngleMode angle_mode = calc->angle_mode;
 
     switch (op) {
-        case '+': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a + b); break;
-        case '-': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a - b); break;
-        case '*': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, a * b); break;
+        case '+': b = nsPop(numbers, calc); a = nsPop(numbers, calc); nsPush(numbers, a + b); break;
+        case '-': b = nsPop(numbers, calc); a = nsPop(numbers, calc); nsPush(numbers, a - b); break;
+        case '*': b = nsPop(numbers, calc); a = nsPop(numbers, calc); nsPush(numbers, a * b); break;
         case '/': 
-            b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); 
+            b = nsPop(numbers, calc); a = nsPop(numbers, calc); 
             if (b == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             } else {
-                ns_push(numbers, a / b);
+                nsPush(numbers, a / b);
             }
             break;
         case '%': 
-            b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); 
+            b = nsPop(numbers, calc); a = nsPop(numbers, calc); 
             if (b == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             }
             else {
-                ns_push(numbers, fmod(a, b));
+                nsPush(numbers, fmod(a, b));
             }
             break;
-        case '^': b = ns_pop(numbers, calc); a = ns_pop(numbers, calc); ns_push(numbers, pow(a, b)); break;
+        case '^': b = nsPop(numbers, calc); a = nsPop(numbers, calc); nsPush(numbers, pow(a, b)); break;
 
         case 's': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? sin(a * M_PI / 180.0) : sin(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? sin(a * M_PI / 180.0) : sin(a)); 
             break;
         case 'c': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? cos(a * M_PI / 180.0) : cos(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? cos(a * M_PI / 180.0) : cos(a)); 
             break;
         case 't': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? tan(a * M_PI / 180.0) : tan(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? tan(a * M_PI / 180.0) : tan(a)); 
             break;
 
         case 'S': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? asin(a) * 180.0 / M_PI : asin(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? asin(a) * 180.0 / M_PI : asin(a)); 
             break;
         case 'C': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? acos(a) * 180.0 / M_PI : acos(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? acos(a) * 180.0 / M_PI : acos(a)); 
             break;
         case 'T': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, angle_mode == DEG ? atan(a) * 180.0 / M_PI : atan(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, angle_mode == DEG ? atan(a) * 180.0 / M_PI : atan(a)); 
             break;
 
         case 'l': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
+            a = nsPop(numbers, calc); 
             if (a <= 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             } else {
-                ns_push(numbers, log(a));
+                nsPush(numbers, log(a));
             }
             break;
         case 'L': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
+            a = nsPop(numbers, calc); 
             if (a <= 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             } else {
-                ns_push(numbers, log10(a));
+                nsPush(numbers, log10(a));
             }
             break;
         case 'q': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
+            a = nsPop(numbers, calc); 
             if (a < 0.0) {
                 calc->error = ERROR_MATH_DOMAIN;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             }
             else {
-                ns_push(numbers, sqrt(a));
+                nsPush(numbers, sqrt(a));
             }
             break;
         case '!': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, factorial(a, calc)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, factorial(a, calc)); 
             break;
         case 'E': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, exp(a)); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, exp(a)); 
             break;
         case 'R': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
+            a = nsPop(numbers, calc); 
             if (a == 0.0) {
                 calc->error = ERROR_MATH_DIV_ZERO;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
             } else {
-                ns_push(numbers, 1.0 / a);
+                nsPush(numbers, 1.0 / a);
             }
             break;
         case 'N': 
             if (numbers->top < 0) {
                 calc->error = ERROR_SYNTAX;
-                ns_push(numbers, NAN);
+                nsPush(numbers, NAN);
                 return;
             }
-            a = ns_pop(numbers, calc); 
-            ns_push(numbers, -a); 
+            a = nsPop(numbers, calc); 
+            nsPush(numbers, -a); 
             break;
         default: break;
     }
 }
 
 double factorial(double n, Calculator* calc) {
+    /**
+     * Computes the factorial of a given double value.
+     * Args:
+     * n (double): The non-negative integer value.
+     * calc (Calculator*): The calculator context pointer to record domain errors.
+     * Returns:
+     * double: The factorial result, or NAN on error.
+     */
     if (n < 0 || floor(n) != n) {
         calc->error = ERROR_MATH_DOMAIN;
         return NAN;
