@@ -1,17 +1,26 @@
 #include <gtk/gtk.h>
+#include <gdk/gdkkeysyms.h>
 #include <glib.h>
 #include <string.h>
 #include <stdlib.h>
 #include "calculator_logic.h"
 
+#define COMPACT_HEIGHT_THRESHOLD 700
+
+
 typedef struct {
     GtkWidget *window;
     GtkWidget *entry;
     GtkWidget *grid;
+    GtkWidget *advanced_grid;
+    GtkWidget *basic_grid;
     GtkWidget *preview_label;
+    GtkWidget *toggle_button;
     Calculator *calc;
     GtkCssProvider *css_provider;
     gboolean is_finalized;
+    gboolean is_compact;
+    gboolean show_advanced;
 } CalculatorApp;
 /**
  * Represents the main calculator application state and GUI components.
@@ -68,6 +77,136 @@ static void initStyles(CalculatorApp *app);
 static void onEntryChanged(GtkEditable *editable, gpointer data);
 static void updatePreview(CalculatorApp *app);
 static void createCalculatorWindow(GtkApplication *app_gtk, gpointer user_data);
+static void updateLayout(CalculatorApp *app);
+static void toggleLayoutMode(CalculatorApp *app);
+static void onTogglePressed(GtkWidget *widget, gpointer data);
+static void onWindowMapped(GtkWidget *widget, gpointer data);
+static void onSurfaceHeightChanged(GObject *object, GParamSpec *pspec, gpointer data);
+static gboolean onKeyPressed(GtkEventControllerKey *controller, guint keyval, guint keycode, GdkModifierType state, gpointer data);
+
+static void updateLayout(CalculatorApp *app) {
+    /**
+     * Updates the visibility of the grid button rows based on layout state.
+     * Args:
+     * app (CalculatorApp *): The application context pointer.
+     * Returns:
+     * void: No return value.
+     */
+    if (app->is_compact) {
+        if (app->show_advanced) {
+            gtk_widget_set_visible(app->advanced_grid, TRUE); // Displays advanced math buttons grid.
+            gtk_widget_set_visible(app->basic_grid, FALSE); // Hides digits/operators grid.
+            gtk_widget_set_vexpand(app->advanced_grid, TRUE); // Expands advanced grid when it is the sole visible layout.
+        } else {
+            gtk_widget_set_visible(app->advanced_grid, FALSE); // Hides advanced math buttons grid.
+            gtk_widget_set_visible(app->basic_grid, TRUE); // Displays digits/operators grid.
+            gtk_widget_set_vexpand(app->basic_grid, TRUE); // Expands basic grid when it is the sole visible layout.
+        }
+    } else {
+        gtk_widget_set_visible(app->advanced_grid, TRUE); // Displays advanced math buttons grid.
+        gtk_widget_set_visible(app->basic_grid, TRUE); // Displays digits/operators grid.
+        gtk_widget_set_vexpand(app->advanced_grid, FALSE); // Retains compact advanced math layout buttons.
+        gtk_widget_set_vexpand(app->basic_grid, TRUE); // Distributes height expansion space to primary digits/operators.
+    }
+}
+
+static void toggleLayoutMode(CalculatorApp *app) {
+    /**
+     * Toggles between basic and advanced button layouts in compact mode.
+     *
+     * Args:
+     *   app (CalculatorApp *): The application context pointer.
+     *
+     * Returns:
+     *   (void): No return value.
+     */
+    if (!app->is_compact) {
+        return; // Ignores layout toggle requests when window height accommodates full interface.
+    }
+    app->show_advanced = !app->show_advanced; // Inverts layout selection flag.
+    updateLayout(app); // Re-renders the button visibility to reflect the toggle action.
+}
+
+static void onTogglePressed(GtkWidget *widget G_GNUC_UNUSED, gpointer data) {
+    /**
+     * Callback for the layout toggle button click.
+     *
+     * Args:
+     *   widget (GtkWidget *): The toggle button widget.
+     *   data (gpointer): The pointer to the CalculatorApp context.
+     *
+     * Returns:
+     *   (void): No return value.
+     */
+    toggleLayoutMode((CalculatorApp *)data); // Invokes the layout switcher.
+}
+
+static void onWindowMapped(GtkWidget *widget, gpointer data) {
+    /**
+     * Callback for window map signal to attach height change listeners to the underlying GdkSurface.
+     *
+     * Args:
+     *   widget (GtkWidget *): The window widget.
+     *   data (gpointer): The pointer to the CalculatorApp context.
+     *
+     * Returns:
+     *   (void): No return value.
+     */
+    CalculatorApp *app = (CalculatorApp *)data;
+    GdkSurface *surface = gtk_native_get_surface(GTK_NATIVE(widget)); // Obtains the native surface handle.
+    if (surface) {
+        g_signal_connect(surface, "notify::height", G_CALLBACK(onSurfaceHeightChanged), app); // Listens for surface height updates.
+    }
+}
+
+static void onSurfaceHeightChanged(GObject *object G_GNUC_UNUSED, GParamSpec *pspec G_GNUC_UNUSED, gpointer data) {
+    /**
+     * Handles surface height property notifications to dynamically adapt calculator layout.
+     * Args:
+     * object (GObject *): The GdkSurface object instance.
+     * pspec (GParamSpec *): The parameter specification of the height property.
+     * data (gpointer): The pointer to the CalculatorApp context.
+     * Returns:
+     * void: No return value.
+     */
+    CalculatorApp *app = (CalculatorApp *)data;
+    int height = gtk_widget_get_height(app->window); // Retrieves the actual physical window height.
+    gboolean new_compact = (height < COMPACT_HEIGHT_THRESHOLD);
+
+    if (new_compact != app->is_compact) {
+        app->is_compact = new_compact; // Updates internal compact mode flag to match physical size boundaries.
+        if (app->is_compact) {
+            gtk_widget_set_visible(app->toggle_button, TRUE); // Displays the compact navigation toggle.
+            app->show_advanced = FALSE; // Reverts view to display digit keyboard layout by default.
+        } else {
+            gtk_widget_set_visible(app->toggle_button, FALSE); // Hides navigation controller in normal mode.
+        }
+        updateLayout(app); // Updates interface button grouping visibility.
+    }
+}
+
+static gboolean onKeyPressed(GtkEventControllerKey *controller G_GNUC_UNUSED, guint keyval, guint keycode G_GNUC_UNUSED, GdkModifierType state, gpointer data) {
+    /**
+     * Handles keyboard shortcuts for the calculator window.
+     *
+     * Args:
+     *   controller (GtkEventControllerKey *): The key event controller.
+     *   keyval (guint): The key symbol pressed.
+     *   keycode (guint): The physical key code.
+     *   state (GdkModifierType): The modifier keys mask.
+     *   data (gpointer): The pointer to the CalculatorApp context.
+     *
+     * Returns:
+     *   (gboolean): TRUE if the event was handled, FALSE otherwise.
+     */
+    CalculatorApp *app = (CalculatorApp *)data;
+    
+    if ((state & GDK_ALT_MASK) && (keyval == GDK_KEY_a || keyval == GDK_KEY_A)) {
+        toggleLayoutMode(app); // Toggles display when Alt + A shortcut is triggered.
+        return TRUE; // Consumes event to prevent further handling.
+    }
+    return FALSE; // Passes event through.
+}
 
 static void updateDisplay(CalculatorApp *app) {
     /**
@@ -427,6 +566,26 @@ static void initStyles(CalculatorApp *app) {
         "} "
         "button.btn-equals:active { "
         "  background-color: #2b6530; "
+        "} "
+        "button.btn-toggle { "
+        "  background-color: #22272e; "
+        "  color: #539bf5; "
+        "  border: 1px solid #444c56; "
+        "  border-radius: 6px; "
+        "  font-size: 16px; "
+        "  font-weight: bold; "
+        "  padding: 2px 10px; "
+        "  transition: transform 0.4s ease-in-out; "
+        "} "
+        "button.btn-toggle:hover { "
+        "  background-color: #2d333b; "
+        "  color: #adbac7; "
+        "  border-color: #768390; "
+        "  transform: rotate(180deg); "
+        "} "
+        "button.btn-toggle:active { "
+        "  background-color: #373e47; "
+        "  transform: rotate(360deg); "
         "} ";
 
     gtk_css_provider_load_from_string(app->css_provider, css);
@@ -518,9 +677,15 @@ static void createCalculatorWindow(GtkApplication *app_gtk, gpointer user_data G
         return;
     }
     gtk_window_set_title(GTK_WINDOW(app->window), "Calculator");
-    gtk_window_set_default_size(GTK_WINDOW(app->window), 400, 550);
+    gtk_window_set_default_size(GTK_WINDOW(app->window), 400, 600);
     gtk_window_set_resizable(GTK_WINDOW(app->window), TRUE);
     g_signal_connect(app->window, "destroy", G_CALLBACK(onWindowDestroy), app);
+
+    GtkEventController *key_controller = gtk_event_controller_key_new(); // Configures the keyboard shortcut event handler.
+    g_signal_connect(key_controller, "key-pressed", G_CALLBACK(onKeyPressed), app);
+    gtk_widget_add_controller(app->window, key_controller); // Connects shortcut triggers to the main window container.
+
+    g_signal_connect(app->window, "map", G_CALLBACK(onWindowMapped), app); // Registers surface callback upon window mapping.
 
     GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 10);
     gtk_widget_set_margin_top(vbox, 10);
@@ -539,134 +704,161 @@ static void createCalculatorWindow(GtkApplication *app_gtk, gpointer user_data G
     g_signal_connect(app->entry, "activate", G_CALLBACK(onEntryActivate), app);
     gtk_box_append(GTK_BOX(vbox), app->entry);
 
+    GtkWidget *preview_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 10); // Creates a status panel to group result preview and toggle navigation.
+
+    app->toggle_button = gtk_button_new_with_label("⇆"); // Initializes double-arrow layout switch controller.
+    gtk_widget_add_css_class(app->toggle_button, "btn-toggle");
+    g_signal_connect(app->toggle_button, "clicked", G_CALLBACK(onTogglePressed), app);
+    gtk_widget_set_visible(app->toggle_button, FALSE); // Defaults to hidden in standard layout modes.
+    gtk_box_append(GTK_BOX(preview_box), app->toggle_button);
+
     app->preview_label = gtk_label_new("");
     gtk_widget_set_halign(app->preview_label, GTK_ALIGN_END);
+    gtk_widget_set_hexpand(app->preview_label, TRUE); // Fills horizontal space for clean aligning.
     gtk_widget_add_css_class(app->preview_label, "display-preview");
     gtk_widget_add_css_class(app->preview_label, "preview-mode");
-    gtk_box_append(GTK_BOX(vbox), app->preview_label);
+    gtk_box_append(GTK_BOX(preview_box), app->preview_label);
+
+    gtk_box_append(GTK_BOX(vbox), preview_box);
 
     updateDisplay(app);
     gtk_widget_grab_focus(app->entry);
 
-    // Prepares the homogeneous grid container to house calculator buttons.
-    app->grid = gtk_grid_new();
-    gtk_grid_set_row_spacing(GTK_GRID(app->grid), 8);
-    gtk_grid_set_column_spacing(GTK_GRID(app->grid), 8);
-    gtk_grid_set_row_homogeneous(GTK_GRID(app->grid), TRUE);
-    gtk_grid_set_column_homogeneous(GTK_GRID(app->grid), TRUE);
+    // Prepares the container to house calculator button grids.
+    app->grid = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
     gtk_box_append(GTK_BOX(vbox), app->grid);
     gtk_widget_set_vexpand(app->grid, TRUE);
     gtk_widget_set_hexpand(app->grid, TRUE);
 
-    // Arranges trigonometry and angle toggles in the first row of the grid.
+    app->advanced_grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(app->advanced_grid), 8);
+    gtk_grid_set_column_spacing(GTK_GRID(app->advanced_grid), 8);
+    gtk_grid_set_row_homogeneous(GTK_GRID(app->advanced_grid), TRUE);
+    gtk_grid_set_column_homogeneous(GTK_GRID(app->advanced_grid), TRUE);
+    gtk_widget_set_vexpand(app->advanced_grid, TRUE);
+    gtk_widget_set_hexpand(app->advanced_grid, TRUE);
+    gtk_box_append(GTK_BOX(app->grid), app->advanced_grid);
+
+    app->basic_grid = gtk_grid_new();
+    gtk_grid_set_row_spacing(GTK_GRID(app->basic_grid), 8);
+    gtk_grid_set_column_spacing(GTK_GRID(app->basic_grid), 8);
+    gtk_grid_set_row_homogeneous(GTK_GRID(app->basic_grid), TRUE);
+    gtk_grid_set_column_homogeneous(GTK_GRID(app->basic_grid), TRUE);
+    gtk_widget_set_vexpand(app->basic_grid, TRUE);
+    gtk_widget_set_hexpand(app->basic_grid, TRUE);
+    gtk_box_append(GTK_BOX(app->grid), app->basic_grid);
+
+    // Arranges trigonometry and angle toggles in the first row of the advanced grid.
     GtkWidget *btn_deg_rad = createButton("DEG", G_CALLBACK(onDegRadPressed), app, "btn-function");
     GtkWidget *btn_sin = createButton("sin", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_cos = createButton("cos", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_tan = createButton("tan", G_CALLBACK(onButtonPressed), app, "btn-function");
 
-    gtk_grid_attach(GTK_GRID(app->grid), btn_deg_rad, 0, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_sin, 1, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_cos, 2, 0, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_tan, 3, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_deg_rad, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_sin, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_cos, 2, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_tan, 3, 0, 1, 1);
 
-    // Positions inverse trigonometry and natural log in the second row.
+    // Positions inverse trigonometry and natural log in the second row of the advanced grid.
     GtkWidget *btn_asin = createButton("sin⁻¹", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_acos = createButton("cos⁻¹", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_atan = createButton("tan⁻¹", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_ln = createButton("ln", G_CALLBACK(onButtonPressed), app, "btn-function");
 
-    gtk_grid_attach(GTK_GRID(app->grid), btn_asin, 0, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_acos, 1, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_atan, 2, 1, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_ln, 3, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_asin, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_acos, 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_atan, 2, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_ln, 3, 1, 1, 1);
 
-    // Places exponentials, square root, and log base 10 in the third row.
+    // Places exponentials, square root, and log base 10 in the third row of the advanced grid.
     GtkWidget *btn_pow = createButton("x^y", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_sqrt = createButton("√", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_ex = createButton("e^x", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_log = createButton("log", G_CALLBACK(onButtonPressed), app, "btn-function");
 
-    gtk_grid_attach(GTK_GRID(app->grid), btn_pow, 0, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_sqrt, 1, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_ex, 2, 2, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_log, 3, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_pow, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_sqrt, 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_ex, 2, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_log, 3, 2, 1, 1);
 
-    // Positions parenthetical controls and mathematical constants in the fourth row.
+    // Positions parenthetical controls and mathematical constants in the fourth row of the advanced grid.
     GtkWidget *btn_lparen = createButton("(", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_rparen = createButton(")", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_pi = createButton("π", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_e = createButton("e", G_CALLBACK(onButtonPressed), app, "btn-function");
 
-    gtk_grid_attach(GTK_GRID(app->grid), btn_lparen, 0, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_rparen, 1, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_pi, 2, 3, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_e, 3, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_lparen, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_rparen, 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_pi, 2, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->advanced_grid), btn_e, 3, 3, 1, 1);
 
-    // Places edit controls, percentage, and division in the fifth row.
+    // Places edit controls, percentage, and division in the first row of the basic grid.
     GtkWidget *btn_c = createButton("C", G_CALLBACK(onClearPressed), app, "btn-function");
     GtkWidget *btn_backspace = createButton("←", G_CALLBACK(onBackspacePressed), app, "btn-function");
     GtkWidget *btn_percent = createButton("%", G_CALLBACK(onButtonPressed), app, "btn-operator");
     GtkWidget *btn_divide = createButton("÷", G_CALLBACK(onButtonPressed), app, "btn-operator");
     
-    gtk_grid_attach(GTK_GRID(app->grid), btn_c, 0, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_backspace, 1, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_percent, 2, 4, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_divide, 3, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_c, 0, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_backspace, 1, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_percent, 2, 0, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_divide, 3, 0, 1, 1);
 
-    // Houses digits seven through nine and multiplication in the sixth row.
+    // Houses digits seven through nine and multiplication in the second row of the basic grid.
     GtkWidget *btn_7 = createButton("7", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_8 = createButton("8", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_9 = createButton("9", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_multiply = createButton("×", G_CALLBACK(onButtonPressed), app, "btn-operator");
     
-    gtk_grid_attach(GTK_GRID(app->grid), btn_7, 0, 5, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_8, 1, 5, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_9, 2, 5, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_multiply, 3, 5, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_7, 0, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_8, 1, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_9, 2, 1, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_multiply, 3, 1, 1, 1);
 
-    // Houses digits four through six and subtraction in the seventh row.
+    // Houses digits four through six and subtraction in the third row of the basic grid.
     GtkWidget *btn_4 = createButton("4", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_5 = createButton("5", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_6 = createButton("6", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_minus = createButton("−", G_CALLBACK(onButtonPressed), app, "btn-operator");
     
-    gtk_grid_attach(GTK_GRID(app->grid), btn_4, 0, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_5, 1, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_6, 2, 6, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_minus, 3, 6, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_4, 0, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_5, 1, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_6, 2, 2, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_minus, 3, 2, 1, 1);
 
-    // Houses digits one through three and addition in the eighth row.
+    // Houses digits one through three and addition in the fourth row of the basic grid.
     GtkWidget *btn_1 = createButton("1", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_2 = createButton("2", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_3 = createButton("3", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_plus = createButton("+", G_CALLBACK(onButtonPressed), app, "btn-operator");
     
-    gtk_grid_attach(GTK_GRID(app->grid), btn_1, 0, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_2, 1, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_3, 2, 7, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_plus, 3, 7, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_1, 0, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_2, 1, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_3, 2, 3, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_plus, 3, 3, 1, 1);
 
-    // Places zero, decimal point, reciprocal, and equals in the ninth row.
+    // Places zero, decimal point, reciprocal, and equals in the fifth row of the basic grid.
     GtkWidget *btn_0 = createButton("0", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_dot = createButton(".", G_CALLBACK(onButtonPressed), app, "btn-digit");
     GtkWidget *btn_reciprocal = createButton("1/x", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_equals = createButton("=", G_CALLBACK(onEqualsPressed), app, "btn-equals");
     
-    gtk_grid_attach(GTK_GRID(app->grid), btn_0, 0, 8, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_dot, 1, 8, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_reciprocal, 2, 8, 1, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_equals, 3, 8, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_0, 0, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_dot, 1, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_reciprocal, 2, 4, 1, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_equals, 3, 4, 1, 1);
 
-    // Spans factorial and sign toggles across the final grid row.
+    // Spans factorial and sign toggles across the final row of the basic grid.
     GtkWidget *btn_factorial = createButton("!", G_CALLBACK(onButtonPressed), app, "btn-function");
     GtkWidget *btn_negate = createButton("+/−", G_CALLBACK(onButtonPressed), app, "btn-function");
-    gtk_grid_attach(GTK_GRID(app->grid), btn_factorial, 0, 9, 2, 1);
-    gtk_grid_attach(GTK_GRID(app->grid), btn_negate, 2, 9, 2, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_factorial, 0, 5, 2, 1);
+    gtk_grid_attach(GTK_GRID(app->basic_grid), btn_negate, 2, 5, 2, 1);
 
     // Initializes styling provider to customize the user interface look.
     initStyles(app);
 
     gtk_widget_add_css_class(app->grid, "grid");
+    gtk_widget_add_css_class(app->advanced_grid, "grid");
+    gtk_widget_add_css_class(app->basic_grid, "grid");
 
     gtk_window_present(GTK_WINDOW(app->window));
 }
